@@ -11,17 +11,21 @@ dependencies = [
 authors = [
 	{ name="Matthew R. McDougal", email="ka0s@arrl.net"}
 ]
-description = "Connector to use EESDR TCI protocol to feed an OpenWebRX instance."
+description = "Connector to use the Expert Electronics TCI protocol to feed an OpenWebRX instance."
 readme = "README.md"
 requires-python = ">=3.8"
 classifiers = [
 	"Programming Language :: Python :: 3",
 	"Development Status :: 3 - Alpha",
+	"Framework :: AsyncIO",
 	"Intended Audience :: Developers",
 	"License :: OSI Approved :: BSD License",
 	"Operating System :: OS Independent",
 	"Topic :: Communications :: Ham Radio"
 ]
+
+[project.scripts]
+eesdr-owrx-connector = "eesdr_owrx_connector.connector:main"
 
 [project.urls]
 "Homepage" = "https://github.com/ars-ka0s/eesdr-owrx-connector"
