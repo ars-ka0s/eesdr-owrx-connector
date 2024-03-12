@@ -92,6 +92,7 @@ class Connector:
         self.demand_iq.clear()
         self.iq_packets = asyncio.Queue()
         self.tci_listener.add_data_listener(TciStreamType.IQ_STREAM, self.tci_receive_data)
+        self.tci_ready.set()
 
         while not self.shutdown:
             await self.demand_iq.wait()
@@ -138,7 +139,9 @@ class Connector:
         signal.signal(signal.SIGTERM, self.cleanup)
         signal.signal(signal.SIGINT, self.cleanup)
 
+        self.tci_ready = asyncio.Event()
         self.tci_task = asyncio.create_task(self.tci_interface())
+        await self.tci_ready.wait()
         self.ctl_task = asyncio.create_task(self.start_server('Control', self.args.control, self.handle_control))
         self.iqs_task = asyncio.create_task(self.start_server('IQ', self.args.port, self.handle_iq))
 
