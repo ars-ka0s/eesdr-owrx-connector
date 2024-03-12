@@ -1,6 +1,7 @@
 import array
 import argparse
 import asyncio
+import signal
 import sys
 
 from eesdr_tci import tci
@@ -13,12 +14,13 @@ class Connector:
         self.ks_handlers = {'center_freq': self.update_center, 'samp_rate': self.update_rate}
         self.demand_iq = None
         self.iq_packets = None
+        self.shutdown = False
 
     async def handle_control(self, reader, writer):
         peer = writer.get_extra_info('peername')
         print(f'New control connection from {peer}', flush=True)
         try:
-            while True:
+            while not self.shutdown:
                 data = await reader.readuntil(b'\n')
                 msg = data.decode('utf-8').strip()
                 if self.args.verbose:
@@ -45,7 +47,7 @@ class Connector:
         print(f'New IQ connection from {peer}', flush=True)
         self.demand_iq.set()
         try:
-            while True:
+            while not self.shutdown:
                 data = await self.iq_packets.get()
                 writer.write(data)
                 await writer.drain()
@@ -91,7 +93,7 @@ class Connector:
         self.iq_packets = asyncio.Queue()
         self.tci_listener.add_data_listener(TciStreamType.IQ_STREAM, self.tci_receive_data)
 
-        while True:
+        while not self.shutdown:
             await self.demand_iq.wait()
             if self.args.verbose:
                 print('IQ demand start', flush=True)
@@ -112,6 +114,13 @@ class Connector:
                 self.iq_packets.get_nowait()
                 self.iq_packets.task_done()
 
+    def cleanup(self, *_):
+        if self.args.verbose:
+            print('Received signal, shutting down', flush=True)
+        self.shutdown = True
+        self.ctl_task.cancel()
+        self.iqs_task.cancel()
+
     async def start(self):
         parser = argparse.ArgumentParser(prog='eesdr-owrx-connector', description='Connector to use the EESDR TCI Protocol to feed an OpenWebRX instance.')
         parser.add_argument('-d', '--device', default='localhost:50001', help='TCI port for radio (default: localhost:50001)')
@@ -126,13 +135,27 @@ class Connector:
         self.keystore['center_freq'] = self.args.frequency
         self.keystore['samp_rate'] = self.args.samplerate
 
-        tci = asyncio.create_task(self.tci_interface())
-        ctl = asyncio.create_task(self.start_server('Control', self.args.control, self.handle_control))
-        iqs = asyncio.create_task(self.start_server('IQ', self.args.port, self.handle_iq))
+        signal.signal(signal.SIGTERM, self.cleanup)
+        signal.signal(signal.SIGINT, self.cleanup)
 
-        await tci
-        await ctl
-        await iqs
+        self.tci_task = asyncio.create_task(self.tci_interface())
+        self.ctl_task = asyncio.create_task(self.start_server('Control', self.args.control, self.handle_control))
+        self.iqs_task = asyncio.create_task(self.start_server('IQ', self.args.port, self.handle_iq))
+
+        try:
+            await self.tci_task
+        except asyncio.exceptions.CancelledError:
+            pass
+
+        try:
+            await self.ctl_task
+        except asyncio.exceptions.CancelledError:
+            pass
+
+        try:
+            await self.iqs_task
+        except asyncio.exceptions.CancelledError:
+            pass
 
         if self.args.verbose:
             print('All tasks complete', flush=True)
