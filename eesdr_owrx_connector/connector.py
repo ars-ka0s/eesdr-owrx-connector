@@ -83,7 +83,6 @@ class Connector:
 
         self.tci_listener.add_param_listener('IQ_SAMPLERATE', self.tci_check_response)
         self.tci_listener.add_param_listener('DDS', self.tci_check_response)
-        await self.update_rate()
 
         self.demand_iq = asyncio.Event()
         self.demand_iq.clear()
@@ -92,10 +91,17 @@ class Connector:
 
         while True:
             await self.demand_iq.wait()
+            if self.args.startstop:
+                await self.tci_listener.send(tci.COMMANDS['START'].prepare_string(TciCommandSendAction.WRITE))
+            await self.tci_listener.send(tci.COMMANDS['RX_ENABLE'].prepare_string(TciCommandSendAction.WRITE, rx=self.args.receiver, params=[True]))
+            await self.update_rate()
+            await self.update_center()
             await self.tci_listener.send(tci.COMMANDS['IQ_START'].prepare_string(TciCommandSendAction.WRITE, rx=self.args.receiver))
             while self.demand_iq.is_set():
                 await asyncio.sleep(0.05)
             await self.tci_listener.send(tci.COMMANDS['IQ_STOP'].prepare_string(TciCommandSendAction.WRITE, rx=self.args.receiver))
+            if self.args.startstop:
+                await self.tci_listener.send(tci.COMMANDS['STOP'].prepare_string(TciCommandSendAction.WRITE))
             while self.iq_packets.qsize():
                 self.iq_packets.get_nowait()
                 self.iq_packets.task_done()
@@ -108,6 +114,7 @@ class Connector:
         parser.add_argument('-f', '--frequency', default=self.keystore['center_freq'], type=int, help='Initial center frequency (default: 14200000)')
         parser.add_argument('-s', '--samplerate', choices=[48000, 96000, 192000, 384000], default=self.keystore['samp_rate'], type=int, help='IQ sample rate (default: 78000)')
         parser.add_argument('-c', '--control', default=44881, type=int, help='Control port (default: 44881)')
+        parser.add_argument('-t', '--startstop', default=False, action='store_true', help='Start/stop the device in addition to the IQ stream')
         parser.add_argument('-v', '--verbose', default=False, action='store_true', help='Show debug info')
         self.args = parser.parse_args()
         self.keystore['center_freq'] = self.args.frequency
