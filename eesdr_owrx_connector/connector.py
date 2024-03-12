@@ -1,6 +1,7 @@
 import array
 import argparse
 import asyncio
+import sys
 
 from eesdr_tci import tci
 from eesdr_tci.Listener import Listener
@@ -15,32 +16,33 @@ class Connector:
 
     async def handle_control(self, reader, writer):
         peer = writer.get_extra_info('peername')
-        print(f'New control connection from {peer}')
+        print(f'New control connection from {peer}', flush=True)
         try:
             while True:
                 data = await reader.readuntil(b'\n')
                 msg = data.decode('utf-8').strip()
+                if self.args.verbose:
+                    print(f'Control message received {msg}', flush=True)
                 if ':' not in msg:
                     continue
                 k, v = msg.split(':', 2)
-                if self.args.verbose:
-                    print(f'Control message received {k}={v}')
                 if k not in self.keystore:
                     continue
                 try:
                     iv = int(v)
                     self.keystore[k] = iv
                     if self.args.verbose:
-                        print('New values', self.keystore)
+                        print('New values', self.keystore, flush=True)
                     await self.ks_handlers[k]()
                 except ValueError:
                     continue
         except Exception as e:
-            print('Error in control connection:', e)
+            print('Error in control connection:', e, flush=True)
+
 
     async def handle_iq(self, reader, writer):
         peer = writer.get_extra_info('peername')
-        print(f'New IQ connection from {peer}')
+        print(f'New IQ connection from {peer}', flush=True)
         self.demand_iq.set()
         try:
             while True:
@@ -49,16 +51,16 @@ class Connector:
                 await writer.drain()
                 self.iq_packets.task_done()
         except Exception as e:
-            print('Error in IQ connection:', e)
+            print('Error in IQ connection:', e, flush=True)
         finally:
             self.demand_iq.clear()
 
     async def start_server(self, kind, port, handler):
-        print(f'Starting {kind} server on {port}')
+        print(f'Starting {kind} server on {port}', flush=True)
         server = await asyncio.start_server(handler, None, port)
         if self.args.verbose:
             addrs = ', '.join(str(sock.getsockname()) for sock in server.sockets)
-            print(f'{kind} ready on {addrs}')
+            print(f'{kind} ready on {addrs}', flush=True)
         await server.serve_forever()
 
     async def update_rate(self):
@@ -69,9 +71,9 @@ class Connector:
 
     async def tci_check_response(self, command, rx, subrx, param):
         if command == 'IQ_SAMPLERATE' and param != self.keystore['samp_rate']:
-            print('Warning: IQ_SAMPLERATE received that does not match desired command')
+            print('IQ_SAMPLERATE received that does not match desired command', file=sys.stderr, flush=True)
         if command == 'DDS' and int(rx) == self.args.receiver and param != self.keystore['center_freq']:
-            print('Warning: DDS received that does not match desired center frequency')
+            print('DDS received that does not match desired center frequency', file=sys.stderr, flush=True)
 
     async def tci_receive_data(self, packet):
         self.iq_packets.put_nowait(packet.data)
@@ -91,6 +93,8 @@ class Connector:
 
         while True:
             await self.demand_iq.wait()
+            if self.args.verbose:
+                print('IQ demand start', flush=True)
             if self.args.startstop:
                 await self.tci_listener.send(tci.COMMANDS['START'].prepare_string(TciCommandSendAction.WRITE))
             await self.tci_listener.send(tci.COMMANDS['RX_ENABLE'].prepare_string(TciCommandSendAction.WRITE, rx=self.args.receiver, params=[True]))
@@ -99,6 +103,8 @@ class Connector:
             await self.tci_listener.send(tci.COMMANDS['IQ_START'].prepare_string(TciCommandSendAction.WRITE, rx=self.args.receiver))
             while self.demand_iq.is_set():
                 await asyncio.sleep(0.05)
+            if self.args.verbose:
+                print('IQ demand stop', flush=True)
             await self.tci_listener.send(tci.COMMANDS['IQ_STOP'].prepare_string(TciCommandSendAction.WRITE, rx=self.args.receiver))
             if self.args.startstop:
                 await self.tci_listener.send(tci.COMMANDS['STOP'].prepare_string(TciCommandSendAction.WRITE))
@@ -127,6 +133,9 @@ class Connector:
         await tci
         await ctl
         await iqs
+
+        if self.args.verbose:
+            print('All tasks complete', flush=True)
 
 def main():
     c = Connector()
