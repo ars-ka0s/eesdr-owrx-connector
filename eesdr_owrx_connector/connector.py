@@ -68,10 +68,10 @@ class Connector:
         await self.tci_listener.send(tci.COMMANDS['DDS'].prepare_string(TciCommandSendAction.WRITE, rx=self.args.receiver, params=[self.keystore['center_freq']]))
 
     async def tci_check_response(self, command, rx, subrx, param):
-        if command == 'IQ_SAMPLERATE':
-            assert(param == self.keystore['samp_rate'])
-        elif command == 'DDS' and int(rx) == self.args.receiver:
-            assert(param == self.keystore['center_freq'])
+        if command == 'IQ_SAMPLERATE' and param != self.keystore['samp_rate']:
+            print('Warning: IQ_SAMPLERATE received that does not match desired command')
+        if command == 'DDS' and int(rx) == self.args.receiver and param != self.keystore['center_freq']:
+            print('Warning: DDS received that does not match desired center frequency')
 
     async def tci_receive_data(self, packet):
         self.iq_packets.put_nowait(packet.data)
