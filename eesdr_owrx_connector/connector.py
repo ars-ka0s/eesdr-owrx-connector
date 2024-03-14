@@ -66,11 +66,13 @@ class IqServer(SocketServer):
     def __init__(self, port, verbose, demand_iq, iq_packets):
         self.demand_iq = demand_iq
         self.iq_packets = iq_packets
+        self.active_clients = 0
         SocketServer.__init__(self, 'IQ', port, self.handle_iq, verbose)
 
     async def handle_iq(self, _reader, writer):
         peer = writer.get_extra_info('peername')
         print(f'New IQ connection from {peer}', flush=True)
+        self.active_clients += 1
         self.demand_iq.set()
         try:
             while True:
@@ -81,7 +83,9 @@ class IqServer(SocketServer):
         except Exception as e:
             print('Error in IQ connection:', e, flush=True)
         finally:
-            self.demand_iq.clear()
+            self.active_clients -= 1
+            if self.active_clients == 0:
+                self.demand_iq.clear()
 
 class Connector:
     SAMPLERATES = [48000, 96000, 192000, 384000]
