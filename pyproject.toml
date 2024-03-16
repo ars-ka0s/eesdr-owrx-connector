@@ -4,9 +4,9 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "eesdr-owrx-connector"
-version = "0.0.1"
+version = "0.0.2"
 dependencies = [
-	"eesdr-tci"
+	"eesdr-tci >= 0.1"
 ]
 authors = [
 	{ name="Matthew R. McDougal", email="ka0s@arrl.net"}

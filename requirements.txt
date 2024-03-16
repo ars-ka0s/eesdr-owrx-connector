@@ -1,1 +1,1 @@
-eesdr_tci               # TCI interface
+eesdr_tci >= 0.1               # TCI interface
