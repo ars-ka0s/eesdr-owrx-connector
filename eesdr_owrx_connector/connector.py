@@ -1,5 +1,6 @@
 import argparse
 import asyncio
+import importlib.metadata
 import signal
 import sys
 
@@ -246,6 +247,9 @@ class Connector:
             action='store_true',
             help='Show debug info'
         )
+
+        print('eesdr-owrx-connector version', importlib.metadata.version('eesdr-owrx-connector'))
+        print('eesdr-tci            version', importlib.metadata.version('eesdr-tci'))
 
         self.args = parser.parse_args()
         self.keystore['center_freq'] = self.args.frequency
